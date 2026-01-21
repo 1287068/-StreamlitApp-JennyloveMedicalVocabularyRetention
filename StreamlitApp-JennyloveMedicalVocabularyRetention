@@ -1,0 +1,161 @@
+import streamlit as st
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
+
+# -----------------------------
+# App Title and Description
+# -----------------------------
+st.title("Jennylove – Medical Vocabulary Retention Model")
+st.subheader("High School Medical / Health Science")
+
+st.markdown(
+    """
+This model shows how **high school students forget medical vocabulary over time**
+and how **review timing** affects retention.
+
+**Instruction starts at 11:00 a.m.**
+"""
+)
+
+# -----------------------------
+# Sidebar Controls
+# -----------------------------
+st.sidebar.header("Student & Instruction Settings")
+
+understanding = st.sidebar.slider(
+    "Understanding After Lesson",
+    min_value=0.5,
+    max_value=0.9,
+    value=0.75,
+    step=0.05,
+)
+
+forgetting_speed = st.sidebar.slider(
+    "Forgetting Speed",
+    min_value=0.02,
+    max_value=0.10,
+    value=0.07,
+    step=0.01,
+)
+
+review_quality = st.sidebar.slider(
+    "Review Quality",
+    min_value=0.0,
+    max_value=0.20,
+    value=0.08,
+    step=0.02,
+)
+
+review_options = st.sidebar.multiselect(
+    "Review Times",
+    [
+        "3:00 p.m. (Same Day)",
+        "8:00 p.m. (Same Day)",
+        "Next Class Period (24h)",
+    ],
+    default=[
+        "3:00 p.m. (Same Day)",
+        "Next Class Period (24h)",
+    ],
+)
+
+# -----------------------------
+# Time Setup
+# -----------------------------
+start_time = datetime.strptime("11:00", "%H:%M")
+total_hours = 72
+t = np.linspace(0, total_hours, 400)
+
+review_times = {
+    "3:00 p.m. (Same Day)": 4,
+    "8:00 p.m. (Same Day)": 9,
+    "Next Class Period (24h)": 24,
+}
+
+# -----------------------------
+# Retention Model
+# -----------------------------
+def retention_curve(t, reviews):
+    retention = understanding * np.exp(-forgetting_speed * t)
+    for r in reviews:
+        retention[t >= r] += review_quality * np.exp(
+            -forgetting_speed * (t[t >= r] - r)
+        )
+    return np.clip(retention, 0, 1)
+
+selected_reviews = [review_times[r] for r in review_options]
+retention = retention_curve(t, selected_reviews)
+
+# -----------------------------
+# Clock Labels
+# -----------------------------
+clock_labels = []
+clock_positions = []
+
+for h in [0, 4, 9, 24, 48, 72]:
+    time_label = (start_time + timedelta(hours=h)).strftime("%I:%M %p")
+    day_offset = h // 24
+    label = f"{time_label}"
+    if day_offset > 0:
+        label += f" (Day {day_offset + 1})"
+    clock_positions.append(h)
+    clock_labels.append(label)
+
+# -----------------------------
+# Plot
+# -----------------------------
+fig, ax = plt.subplots()
+ax.plot(t, retention)
+ax.set_ylim(0, 1.05)
+
+ax.set_xlabel("Time Since Instruction (Hours)")
+ax.set_ylabel("Vocabulary Remembered")
+ax.set_title("Medical Vocabulary Retention Over Time")
+
+ax.set_xticks(clock_positions)
+ax.set_xticklabels(clock_labels, rotation=30)
+
+for r in selected_reviews:
+    ax.axvline(r, linestyle="--")
+
+st.pyplot(fig)
+
+# -----------------------------
+# Key Checkpoints Table
+# -----------------------------
+st.subheader("Retention at Key Times")
+
+checkpoints = [0, 24, 48, 72]
+checkpoint_labels = ["11:00 a.m. (Start)", "24 Hours", "48 Hours", "72 Hours"]
+
+values = retention_curve(
+    np.array(checkpoints),
+    selected_reviews
+)
+
+st.table(
+    {
+        "Time": checkpoint_labels,
+        "Vocabulary Remembered (%)": (values * 100).round(1),
+    }
+)
+
+# -----------------------------
+# Instructional Interpretation
+# -----------------------------
+st.markdown(
+    """
+### What This Shows Teachers and Students
+
+- **Same-day review (3–9 hours later)** dramatically reduces next-day forgetting  
+- **Waiting until the next class period** helps, but some loss is unavoidable  
+- Even strong students need **early retrieval**, not just rereading  
+
+This model supports:
+- Bell ringers  
+- Exit tickets  
+- Spiral vocabulary use  
+- Short, frequent retrieval activities  
+"""
+)
